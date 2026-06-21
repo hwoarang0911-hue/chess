@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>♟ 체스 — 1인용 / 2인용</title>
+<style>
+  :root{
+    --sq: clamp(34px, 9.2vmin, 64px);
+    --board: calc(var(--sq) * 8);
+    --light: #f0d9b5;
+    --dark:  #b58863;
+    --hl:    rgba(255, 230, 0, 0.62);
+    --hlcap: rgba(255, 140, 0, 0.55);
+    --sel:   rgba(80, 160, 255, 0.65);
+    --last:  rgba(120, 200, 90, 0.45);
+    --check: rgba(255, 40, 40, 0.70);
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family: "Segoe UI", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: linear-gradient(160deg,#2b2d42,#1a1b2b);
+    color:#e9e9f0; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+    padding:18px 12px 40px;
+  }
+  h1{ font-size:1.5rem; margin:.2em 0 .5em; letter-spacing:.04em; font-weight:700; }
+  h1 small{ display:block; font-size:.78rem; font-weight:400; opacity:.7; margin-top:4px; }
+
+  #main{
+    display:flex; flex-wrap:wrap; gap:22px; justify-content:center; align-items:flex-start;
+    width:100%; max-width:980px;
+  }
+
+  /* ---------- Board ---------- */
+  #boardWrap{ position:relative; width:var(--board); height:var(--board); flex:0 0 auto; }
+  #board{
+    width:var(--board); height:var(--board);
+    display:grid;
+    grid-template-columns:repeat(8, var(--sq));
+    grid-template-rows:repeat(8, var(--sq));
+    border:4px solid #3a2a1c; border-radius:6px; overflow:hidden;
+    box-shadow:0 14px 40px rgba(0,0,0,.5);
+    touch-action:manipulation;
+  }
+  .square{
+    position:relative; width:var(--sq); height:var(--sq);
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(var(--sq) * 0.74); line-height:1; cursor:pointer;
+    user-select:none; -webkit-user-select:none;
+  }
+  .square.light{ background:var(--light); }
+  .square.dark{  background:var(--dark); }
+  .square.sel::after{ content:""; position:absolute; inset:0; background:var(--sel); }
+  .square.last::after{ content:""; position:absolute; inset:0; background:var(--last); }
+  .square.check{ box-shadow: inset 0 0 0 4px var(--check); border-radius:4px; }
+
+  /* legal-move dots / capture rings sit above the square bg */
+  .square .hint{ position:absolute; inset:0; pointer-events:none; }
+  .square.hl .hint::before{
+    content:""; position:absolute; left:50%; top:50%; width:32%; height:32%;
+    transform:translate(-50%,-50%); border-radius:50%; background:var(--hl);
+  }
+  .square.hl.cap .hint::before{
+    width:88%; height:88%; background:transparent;
+    border:6px solid var(--hlcap); box-sizing:border-box;
+  }
+
+  .piece{ position:relative; z-index:2; pointer-events:none; }
+  .piece-w{ color:#ffffff; text-shadow:0 0 2px #000, 0 1px 2px rgba(0,0,0,.6); }
+  .piece-b{ color:#1a1a1a; text-shadow:0 0 1px #000, 0 1px 2px rgba(255,255,255,.25); }
+
+  .coord{ position:absolute; font-size:calc(var(--sq) * 0.18); font-weight:700; opacity:.55; z-index:3; pointer-events:none; }
+  .coord.file{ right:3px; bottom:1px; }
+  .coord.rank{ left:3px; top:1px; }
+  .square.light .coord{ color:#7a5a3a; }
+  .square.dark  .coord{ color:#efe2cf; }
+
+  /* ---------- Center message (check / mate / stalemate) ---------- */
+  #centerMessage{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; z-index:30;
+  }
+  #centerMessage .bubble{
+    padding:.18em .55em; border-radius:14px;
+    background:rgba(0,0,0,.32); backdrop-filter:blur(1.5px);
+    font-size:calc(var(--sq) * 0.66); font-weight:900; letter-spacing:.02em; white-space:nowrap;
+  }
+  #centerMessage.hidden{ display:none; }
+  .msg-w .bubble{ color:#ffffff; -webkit-text-stroke:2px #000; text-shadow:0 0 6px rgba(0,0,0,.8); }
+  .msg-b .bubble{ color:#0a0a0a; -webkit-text-stroke:2px #fff; text-shadow:0 0 6px rgba(255,255,255,.8); background:rgba(255,255,255,.28); }
+  .msg-draw .bubble{ color:#ffd54a; -webkit-text-stroke:2px #4a2f00; text-shadow:0 0 6px rgba(0,0,0,.7); }
+
+  /* ---------- Overlay (start / difficulty) ---------- */
+  #overlay{
+    position:absolute; inset:0; z-index:50;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(12,12,22,.82); backdrop-filter:blur(3px);
+    border-radius:6px; text-align:center;
+  }
+  #overlay.hidden{ display:none; }
+  .screen{ display:flex; flex-direction:column; align-items:center; gap:18px; padding:18px; }
+  .screen.hidden{ display:none; }
+  .brand{ font-size:calc(var(--sq) * 0.7); font-weight:900; letter-spacing:.06em; }
+  .brand .sub{ display:block; font-size:.42em; font-weight:500; opacity:.8; margin-top:8px; letter-spacing:.02em; }
+  .subtitle{ font-size:1.15rem; font-weight:700; opacity:.95; }
+
+  button{ font-family:inherit; cursor:pointer; border:none; border-radius:10px; transition:transform .06s ease, filter .15s ease; }
+  button:active{ transform:translateY(1px) scale(.99); }
+  .bigBtn{
+    font-size:1.5rem; font-weight:800; letter-spacing:.12em; color:#1a1b2b;
+    background:linear-gradient(180deg,#ffe07a,#f5b942); padding:14px 46px; border-radius:40px;
+    box-shadow:0 8px 22px rgba(0,0,0,.45);
+  }
+  .bigBtn:hover{ filter:brightness(1.07); }
+  .diffGrid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .diffBtn{
+    font-size:1.05rem; font-weight:700; color:#fff; padding:14px 8px; min-width:120px;
+    background:linear-gradient(180deg,#4f6bff,#3b51d6); box-shadow:0 6px 16px rgba(0,0,0,.4);
+  }
+  .diffBtn:hover{ filter:brightness(1.1); }
+  .diffBtn[data-d="easy"]   { background:linear-gradient(180deg,#3ec97a,#2ba35e); }
+  .diffBtn[data-d="middle"] { background:linear-gradient(180deg,#4f9bff,#2f78e0); }
+  .diffBtn[data-d="hard"]   { background:linear-gradient(180deg,#ff9f4a,#e9772a); }
+  .diffBtn[data-d="expert"] { background:linear-gradient(180deg,#ff5d73,#d63a55); }
+  .diffBtn .lv{ display:block; font-size:.66rem; font-weight:500; opacity:.85; margin-top:4px; }
+  .twoP{
+    margin-top:6px; font-size:.98rem; font-weight:700; color:#fff; padding:11px 20px;
+    background:linear-gradient(180deg,#8a6bff,#6b46d6); box-shadow:0 6px 16px rgba(0,0,0,.4);
+  }
+  .linkBtn{ background:transparent; color:#cfd2e6; font-size:.9rem; padding:6px 10px; text-decoration:underline; }
+  .orRule{ font-size:.78rem; opacity:.6; letter-spacing:.18em; }
+
+  /* ---------- Promotion modal ---------- */
+  #promoModal{
+    position:absolute; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+    background:rgba(10,10,20,.6);
+  }
+  #promoModal.hidden{ display:none; }
+  .promoBox{ background:#23253a; border-radius:14px; padding:16px 18px; box-shadow:0 10px 30px rgba(0,0,0,.6); text-align:center; }
+  .promoBox .t{ font-weight:700; margin-bottom:10px; }
+  .promoBtns{ display:flex; gap:8px; }
+  .promoBtns button{
+    width:calc(var(--sq) * 1.05); height:calc(var(--sq) * 1.05);
+    font-size:calc(var(--sq) * 0.7); background:#f0d9b5; color:#1a1a1a; border-radius:10px;
+  }
+  .promoBtns button:hover{ filter:brightness(1.05); }
+
+  /* ---------- Side panel ---------- */
+  #side{ flex:1 1 240px; max-width:320px; min-width:230px; display:flex; flex-direction:column; gap:14px; }
+  .card{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:14px; }
+  #status{ font-size:1rem; font-weight:600; min-height:1.2em; }
+  #status .turnDot{ display:inline-block; width:.7em; height:.7em; border-radius:50%; margin-right:.45em; vertical-align:baseline; border:1px solid rgba(0,0,0,.4); }
+  #subStatus{ font-size:.82rem; opacity:.72; margin-top:6px; }
+  #thinking{ font-size:.82rem; color:#ffd54a; margin-top:6px; height:1em; }
+  .controls{ display:flex; gap:8px; flex-wrap:wrap; }
+  .ctrlBtn{
+    flex:1 1 auto; font-size:.92rem; font-weight:600; color:#fff; padding:10px 12px;
+    background:linear-gradient(180deg,#5a5d80,#454764); box-shadow:0 4px 10px rgba(0,0,0,.3);
+  }
+  .ctrlBtn:hover{ filter:brightness(1.1); }
+  .ctrlBtn.primary{ background:linear-gradient(180deg,#f5b942,#e09a1f); color:#1a1b2b; }
+
+  .capRow{ display:flex; align-items:center; gap:6px; min-height:1.7em; font-size:1.25rem; line-height:1; flex-wrap:wrap; }
+  .capRow .lbl{ font-size:.72rem; opacity:.6; width:46px; flex:0 0 auto; }
+  .capRow .adv{ font-size:.72rem; opacity:.7; margin-left:auto; }
+  .cap-w{ color:#fff; text-shadow:0 0 1px #000; }
+  .cap-b{ color:#111; text-shadow:0 0 1px #777; }
+
+  #historyCard h3{ margin:0 0 8px; font-size:.9rem; opacity:.8; font-weight:700; }
+  #moveList{ width:100%; border-collapse:collapse; font-size:.86rem; font-variant-numeric:tabular-nums; }
+  #moveList td{ padding:2px 6px; }
+  #moveList .no{ opacity:.5; width:30px; text-align:right; }
+  #moveList .w, #moveList .b{ width:45%; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  #moveScroll{ max-height:240px; overflow-y:auto; }
+  #moveList tr:nth-child(even){ background:rgba(255,255,255,.04); }
+
+  footer{ margin-top:26px; font-size:.74rem; opacity:.45; text-align:center; max-width:640px; line-height:1.5; }
+</style>
+</head>
+<body>
+  <h1>♟ 체스
+    <small>White = 플레이어 · Black = 컴퓨터(AI) · 백 선공</small>
+  </h1>
+
+  <div id="main">
+    <div id="boardWrap">
+      <div id="board"></div>
+
+      <div id="centerMessage" class="hidden"><div class="bubble"></div></div>
+
+      <div id="overlay">
+        <!-- Start screen -->
+        <div class="screen" id="screenStart">
+          <div class="brand">♔ CHESS ♚<span class="sub">한 수 한 수, 머리싸움</span></div>
+          <button class="bigBtn" id="playBtn">PLAY</button>
+        </div>
+        <!-- Difficulty screen -->
+        <div class="screen hidden" id="screenDifficulty">
+          <div class="subtitle">난이도 선택</div>
+          <div class="diffGrid">
+            <button class="diffBtn" data-d="easy">Easy<span class="lv">무작위 수</span></button>
+            <button class="diffBtn" data-d="middle">Middle<span class="lv">1수 앞 평가</span></button>
+            <button class="diffBtn" data-d="hard">Hard<span class="lv">미니맥스 D3</span></button>
+            <button class="diffBtn" data-d="expert">Expert<span class="lv">알파베타 D4</span></button>
+          </div>
+          <div class="orRule">— 또는 —</div>
+          <button class="twoP" id="twoPlayerBtn">👥 2인용 (사람 vs 사람)</button>
+          <button class="linkBtn" id="backBtn">← 뒤로</button>
+        </div>
+      </div>
+
+      <!-- Promotion modal -->
+      <div id="promoModal" class="hidden">
+        <div class="promoBox">
+          <div class="t">승급할 기물 선택</div>
+          <div class="promoBtns" id="promoBtns"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside id="side">
+      <div class="card">
+        <div id="status">시작하려면 PLAY를 누르세요.</div>
+        <div id="subStatus"></div>
+        <div id="thinking"></div>
+      </div>
+
+      <div class="card">
+        <div class="controls">
+          <button class="ctrlBtn primary" id="restartBtn">⟳ 다시 시작</button>
+          <button class="ctrlBtn" id="undoBtn" title="한 수 무르기">↶ 무르기</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="capRow"><span class="lbl">백 획득</span><span id="capByWhite"></span><span class="adv" id="advWhite"></span></div>
+        <div class="capRow"><span class="lbl">흑 획득</span><span id="capByBlack"></span><span class="adv" id="advBlack"></span></div>
+      </div>
+
+      <div class="card" id="historyCard">
+        <h3>기보 (이동 기록)</h3>
+        <div id="moveScroll"><table id="moveList"></table></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    말을 클릭하면 갈 수 있는 칸이 노란색으로 표시됩니다. 캐슬링·앙파상·프로모션·체크/메이트·스테일메이트를 모두 지원합니다.
+  </footer>
+
+<script>
+/* =========================================================================
+   체스 엔진 + AI + UI  (단일 파일)
+   보드 좌표: board[r][c]  (r=0 = 8랭크/맨 위 = 흑 진영,  r=7 = 1랭크/맨 아래 = 백 진영)
+   기물 표기: 2글자 문자열  ('w'|'b') + ('p'|'n'|'b'|'r'|'q'|'k'),  빈 칸 = null
+   ========================================================================= */
+
+/* ---------- 상수 ---------- */
+const GLYPH = {
+  w:{ p:'♙', n:'♘', b:'♗', r:'♖', q:'♕', k:'♔' },
+  b:{ p:'♟', n:'♞', b:'♝', r:'♜', q:'♛', k:'♚' }
+};
+const VAL = { p:100, n:300, b:300, r:500, q:900, k:0 };
+const NICE = { p:'폰', n:'나이트', b:'비숍', r:'룩', q:'퀸', k:'킹' };
+const INF = 1e9, MATE = 1e7;
+
+const KN = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+const KD = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+const ROOK = [[-1,0],[1,0],[0,-1],[0,1]];
+const BISHOP = [[-1,-1],[-1,1],[1,-1],[1,1]];
+const QUEEN = ROOK.concat(BISHOP);
+
+/* 피스-스퀘어 테이블: 행 0 = 8랭크(맨 위). 백은 [r][c], 흑은 [7-r][c] 사용. */
+const PST_P = [
+  [ 0, 0, 0, 0, 0, 0, 0, 0],
+  [50,50,50,50,50,50,50,50],
+  [10,10,20,30,30,20,10,10],
+  [ 5, 5,10,25,25,10, 5, 5],
+  [ 0, 0, 0,20,20, 0, 0, 0],
+  [ 5,-5,-10,0, 0,-10,-5, 5],
+  [ 5,10,10,-20,-20,10,10, 5],
+  [ 0, 0, 0, 0, 0, 0, 0, 0]
+];
+const PST_N = [
+  [-50,-40,-30,-30,-30,-30,-40,-50],
+  [-40,-20,  0,  0,  0,  0,-20,-40],
+  [-30,  0, 10, 15, 15, 10,  0,-30],
+  [-30,  5, 15, 20, 20, 15,  5,-30],
+  [-30,  0, 15, 20, 20, 15,  0,-30],
+  [-30,  5, 10, 15, 15, 10,  5,-30],
+  [-40,-20,  0,  5,  5,  0,-20,-40],
+  [-50,-40,-30,-30,-30,-30,-40,-50]
+];
+const PST_B = [
+  [-20,-10,-10,-10,-10,-10,-10,-20],
+  [-10,  0,  0,  0,  0,  0,  0,-10],
+  [-10,  0,  5, 10, 10,  5,  0,-10],
+  [-10,  5,  5, 10, 10,  5,  5,-10],
+  [-10,  0, 10, 10, 10, 10,  0,-10],
+  [-10, 10, 10, 10, 10, 10, 10,-10],
+  [-10,  5,  0,  0,  0,  0,  5,-10],
+  [-20,-10,-10,-10,-10,-10,-10,-20]
+];
+const PST_R = [
+  [  0, 0, 0, 0, 0, 0, 0,  0],
+  [  5,10,10,10,10,10,10,  5],
+  [ -5, 0, 0, 0, 0, 0, 0, -5],
+  [ -5, 0, 0, 0, 0, 0, 0, -5],
+  [ -5, 0, 0, 0, 0, 0, 0, -5],
+  [ -5, 0, 0, 0, 0, 0, 0, -5],
+  [ -5, 0, 0, 0, 0, 0, 0, -5],
+  [  0, 0, 0, 5, 5, 0, 0,  0]
+];
+const PST_Q = [
+  [-20,-10,-10,-5,-5,-10,-10,-20],
+  [-10,  0,  0, 0, 0,  0,  0,-10],
+  [-10,  0,  5, 5, 5,  5,  0,-10],
+  [ -5,  0,  5, 5, 5,  5,  0, -5],
+  [  0,  0,  5, 5, 5,  5,  0, -5],
+  [-10,  5,  5, 5, 5,  5,  0,-10],
+  [-10,  0,  5, 0, 0,  0,  0,-10],
+  [-20,-10,-10,-5,-5,-10,-10,-20]
+];
+const PST_K = [
+  [-30,-40,-40,-50,-50,-40,-40,-30],
+  [-30,-40,-40,-50,-50,-40,-40,-30],
+  [-30,-40,-40,-50,-50,-40,-40,-30],
+  [-30,-40,-40,-50,-50,-40,-40,-30],
+  [-20,-30,-30,-40,-40,-30,-30,-20],
+  [-10,-20,-20,-20,-20,-20,-20,-10],
+  [ 20, 20,  0,  0,  0,  0, 20, 20],
+  [ 20, 30, 10,  0,  0, 10, 30, 20]
+];
+const PSTS = { p:PST_P, n:PST_N, b:PST_B, r:PST_R, q:PST_Q, k:PST_K };
+
+/* ---------- 유틸 ---------- */
+function inb(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+function opp(c){ return c==='w' ? 'b' : 'w'; }
+const fileCh = c => "abcdefgh"[c];
+const rankCh = r => String(8 - r);
+const sq = (r,c) => fileCh(c) + rankCh(r);
+
+/* ---------- 초기 상태 ---------- */
+function initState(){
+  const e = null;
+  const board = [
+    ['br','bn','bb','bq','bk','bb','bn','br'],
+    ['bp','bp','bp','bp','bp','bp','bp','bp'],
+    [e,e,e,e,e,e,e,e],
+    [e,e,e,e,e,e,e,e],
+    [e,e,e,e,e,e,e,e],
+    [e,e,e,e,e,e,e,e],
+    ['wp','wp','wp','wp','wp','wp','wp','wp'],
+    ['wr','wn','wb','wq','wk','wb','wn','wr']
+  ];
+  return { board, turn:'w', castling:{wK:true,wQ:true,bK:true,bQ:true}, ep:null };
+}
+
+/* ---------- 이동 객체 생성 ---------- */
+function mk(fr,fc,tr,tc,piece,captured,flags){
+  return { fr,fc,tr,tc, piece, captured:captured||null,
+           promotion: flags.promotion||null, isPromo: !!flags.isPromo,
+           flags:{ ep:!!flags.ep, castle:flags.castle||null, double:!!flags.double } };
+}
+
+/* ---------- 공격 판정 ---------- */
+function chk(b,r,c,pc){ return inb(r,c) && b[r][c]===pc; }
+function isSquareAttacked(b, r, c, by){
+  if(by==='w'){ if(chk(b,r+1,c-1,'wp')||chk(b,r+1,c+1,'wp')) return true; }
+  else        { if(chk(b,r-1,c-1,'bp')||chk(b,r-1,c+1,'bp')) return true; }
+  for(const [dr,dc] of KN) if(chk(b,r+dr,c+dc,by+'n')) return true;
+  for(const [dr,dc] of KD) if(chk(b,r+dr,c+dc,by+'k')) return true;
+  for(const [dr,dc] of ROOK){
+    let nr=r+dr,nc=c+dc;
+    while(inb(nr,nc)){ const p=b[nr][nc]; if(p){ if(p[0]===by&&(p[1]==='r'||p[1]==='q')) return true; break; } nr+=dr; nc+=dc; }
+  }
+  for(const [dr,dc] of BISHOP){
+    let nr=r+dr,nc=c+dc;
+    while(inb(nr,nc)){ const p=b[nr][nc]; if(p){ if(p[0]===by&&(p[1]==='b'||p[1]==='q')) return true; break; } nr+=dr; nc+=dc; }
+  }
+  return false;
+}
+function findKing(b,color){
+  const k=color+'k';
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]===k) return [r,c];
+  return null;
+}
+function inCheck(state,color){
+  const k=findKing(state.board,color);
+  if(!k) return false;
+  return isSquareAttacked(state.board,k[0],k[1],opp(color));
+}
+
+/* ---------- 의사합법 수 생성 ---------- */
+function addPawnMove(moves,fr,fc,tr,tc,piece,captured,lastRow){
+  if(tr===lastRow){
+    moves.push(mk(fr,fc,tr,tc,piece,captured,{promotion:'q',isPromo:true}));
+  } else {
+    moves.push(mk(fr,fc,tr,tc,piece,captured,{}));
+  }
+}
+function addCastling(state,color,r,c,moves){
+  const home = color==='w'?7:0;
+  if(r!==home || c!==4) return;
+  const en = opp(color);
+  const b = state.board;
+  if(inCheck(state,color)) return; // 체크 중엔 캐슬링 불가
+  const cr = state.castling;
+  // 킹사이드
+  if(color==='w'?cr.wK:cr.bK){
+    if(!b[home][5] && !b[home][6] && b[home][7]===color+'r'
+       && !isSquareAttacked(b,home,5,en) && !isSquareAttacked(b,home,6,en)){
+      moves.push(mk(home,4,home,6,color+'k',null,{castle:'k'}));
+    }
+  }
+  // 퀸사이드
+  if(color==='w'?cr.wQ:cr.bQ){
+    if(!b[home][1] && !b[home][2] && !b[home][3] && b[home][0]===color+'r'
+       && !isSquareAttacked(b,home,3,en) && !isSquareAttacked(b,home,2,en)){
+      moves.push(mk(home,4,home,2,color+'k',null,{castle:'q'}));
+    }
+  }
+}
+function genPseudoLegal(state,color){
+  const b=state.board, moves=[];
+  const dir = color==='w'?-1:1;
+  const startRow = color==='w'?6:1;
+  const lastRow  = color==='w'?0:7;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=b[r][c]; if(!p || p[0]!==color) continue;
+    const t=p[1];
+    if(t==='p'){
+      const one=r+dir;
+      if(inb(one,c) && !b[one][c]){
+        addPawnMove(moves,r,c,one,c,p,null,lastRow);
+        const two=r+2*dir;
+        if(r===startRow && !b[two][c]) moves.push(mk(r,c,two,c,p,null,{double:true}));
+      }
+      for(const dc of [-1,1]){
+        const nr=r+dir, nc=c+dc;
+        if(!inb(nr,nc)) continue;
+        const tp=b[nr][nc];
+        if(tp && tp[0]!==color){ addPawnMove(moves,r,c,nr,nc,p,tp,lastRow); }
+        else if(state.ep && state.ep[0]===nr && state.ep[1]===nc){
+          moves.push(mk(r,c,nr,nc,p,b[r][nc],{ep:true})); // 앙파상
+        }
+      }
+    } else if(t==='n'){
+      for(const [dr,dc] of KN){ const nr=r+dr,nc=c+dc; if(!inb(nr,nc)) continue; const tp=b[nr][nc]; if(!tp||tp[0]!==color) moves.push(mk(r,c,nr,nc,p,tp,{})); }
+    } else if(t==='k'){
+      for(const [dr,dc] of KD){ const nr=r+dr,nc=c+dc; if(!inb(nr,nc)) continue; const tp=b[nr][nc]; if(!tp||tp[0]!==color) moves.push(mk(r,c,nr,nc,p,tp,{})); }
+      addCastling(state,color,r,c,moves);
+    } else {
+      const dirs = t==='r'?ROOK : t==='b'?BISHOP : QUEEN;
+      for(const [dr,dc] of dirs){
+        let nr=r+dr,nc=c+dc;
+        while(inb(nr,nc)){
+          const tp=b[nr][nc];
+          if(!tp){ moves.push(mk(r,c,nr,nc,p,null,{})); }
+          else { if(tp[0]!==color) moves.push(mk(r,c,nr,nc,p,tp,{})); break; }
+          nr+=dr; nc+=dc;
+        }
+      }
+    }
+  }
+  return moves;
+}
+
+/* ---------- 수 적용 (새 상태 반환, 원본 불변) ---------- */
+function makeMove(state,m){
+  const b = state.board.map(row=>row.slice());
+  const color = m.piece[0];
+  if(m.flags.ep) b[m.fr][m.tc]=null;            // 앙파상으로 잡힌 폰 제거
+  b[m.tr][m.tc] = m.promotion ? color+m.promotion : m.piece;
+  b[m.fr][m.fc] = null;
+  if(m.flags.castle==='k'){ b[m.fr][5]=b[m.fr][7]; b[m.fr][7]=null; }
+  if(m.flags.castle==='q'){ b[m.fr][3]=b[m.fr][0]; b[m.fr][0]=null; }
+
+  const cr = { ...state.castling };
+  if(m.piece[1]==='k'){ if(color==='w'){ cr.wK=false; cr.wQ=false; } else { cr.bK=false; cr.bQ=false; } }
+  const touch=(r,c)=>{
+    if(r===7&&c===0) cr.wQ=false; else if(r===7&&c===7) cr.wK=false;
+    else if(r===0&&c===0) cr.bQ=false; else if(r===0&&c===7) cr.bK=false;
+  };
+  touch(m.fr,m.fc); touch(m.tr,m.tc);
+
+  const ep = m.flags.double ? [(m.fr+m.tr)/2, m.fc] : null;
+  return { board:b, turn:opp(color), castling:cr, ep };
+}
+
+/* ---------- 합법 수 (자기 킹이 잡히는 수 제외) ---------- */
+function genLegal(state,color){
+  const out=[];
+  for(const m of genPseudoLegal(state,color)){
+    const ns=makeMove(state,m);
+    if(!inCheck(ns,color)) out.push(m);
+  }
+  return out;
+}
+
+/* ============================ AI ============================ */
+function countPseudo(state,color){ return genPseudoLegal(state,color).length; }
+
+function kingSafety(state,color){
+  const k=findKing(state.board,color); if(!k) return 0;
+  const b=state.board, dir=color==='w'?-1:1; let s=0;
+  for(const dc of [-1,0,1]){ const r=k[0]+dir, c=k[1]+dc; if(inb(r,c)&&b[r][c]===color+'p') s+=10; }
+  return s;
+}
+
+function evaluate(state,level){
+  const b=state.board; let s=0, wB=0, bB=0;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=b[r][c]; if(!p) continue;
+    const col=p[0], t=p[1];
+    let v=VAL[t];
+    if(level>=2) v += PSTS[t][ col==='w'?r:7-r ][c];
+    if(col==='w'){ s+=v; if(t==='b') wB++; } else { s-=v; if(t==='b') bB++; }
+  }
+  if(level>=2){ if(wB>=2) s+=30; if(bB>=2) s-=30; }   // 비숍 페어
+  if(level>=3){
+    s += 2*(countPseudo(state,'w')-countPseudo(state,'b'));   // 기동성
+    s += kingSafety(state,'w') - kingSafety(state,'b');        // 킹 안전
+  }
+  return s;
+}
+
+function scoreMove(m){
+  let s=0;
+  if(m.captured) s += 10*VAL[m.captured[1]] - VAL[m.piece[1]]; // MVV-LVA
+  if(m.promotion) s += 800;
+  if(m.flags.castle) s += 25;
+  return s;
+}
+function orderMoves(moves){ moves.sort((a,b)=>scoreMove(b)-scoreMove(a)); }
+
+function minimax(state, depth, alpha, beta, deadline, level, ply){
+  if(performance.now() > deadline) throw 'ABORT';
+  const color=state.turn;
+  const moves=genLegal(state,color);
+  if(moves.length===0){
+    if(inCheck(state,color)) return color==='w' ? -(MATE-ply) : (MATE-ply);
+    return 0; // 스테일메이트
+  }
+  if(depth===0) return evaluate(state,level);
+  orderMoves(moves);
+  if(color==='w'){
+    let best=-INF;
+    for(const m of moves){
+      const v=minimax(makeMove(state,m),depth-1,alpha,beta,deadline,level,ply+1);
+      if(v>best) best=v;
+      if(best>alpha) alpha=best;
+      if(alpha>=beta) break;
+    }
+    return best;
+  } else {
+    let best=INF;
+    for(const m of moves){
+      const v=minimax(makeMove(state,m),depth-1,alpha,beta,deadline,level,ply+1);
+      if(v<best) best=v;
+      if(best<beta) beta=best;
+      if(beta<=alpha) break;
+    }
+    return best;
+  }
+}
+
+/* 반복 심화 + 시간 제한 → 깊이가 깊어도 UI가 오래 멈추지 않음 */
+function rootSearch(state, maxDepth, timeCap, level){
+  const color=state.turn;
+  let moves=genLegal(state,color);
+  if(moves.length===0) return null;
+  orderMoves(moves);
+  let bestMove=moves[0];
+  const start=performance.now(), deadline=start+timeCap;
+  for(let depth=1; depth<=maxDepth; depth++){
+    let localBest=null, bestScore = color==='w'?-INF:INF, alpha=-INF, beta=INF, aborted=false;
+    moves = [bestMove, ...moves.filter(m=>m!==bestMove)]; // 이전 최선 수 먼저
+    try{
+      for(const m of moves){
+        const v=minimax(makeMove(state,m),depth-1,alpha,beta,deadline,level,1);
+        if(color==='w'){ if(v>bestScore){ bestScore=v; localBest=m; } if(bestScore>alpha) alpha=bestScore; }
+        else           { if(v<bestScore){ bestScore=v; localBest=m; } if(bestScore<beta) beta=bestScore; }
+      }
+    } catch(e){ aborted=true; }
+    if(!aborted && localBest) bestMove=localBest;
+    if(aborted || performance.now()>deadline) break;
+  }
+  return bestMove;
+}
+
+function chooseAIMove(state, diff){
+  const legal=genLegal(state,state.turn);
+  if(legal.length===0) return null;
+  if(diff==='easy')   return legal[Math.floor(Math.random()*legal.length)];
+  if(diff==='middle') return rootSearch(state, 1, 2000, 1);
+  if(diff==='hard')   return rootSearch(state, 3, 1400, 2);
+  return rootSearch(state, 4, 2400, 3); // expert
+}
+
+/* ============================ UI / 게임 흐름 ============================ */
+const THINK_DELAY = 320;
+
+let state, difficulty='middle', twoPlayer=false;
+let gameActive=false, gameOver=false, aiThinking=false;
+let selected=null, legalForSelected=[];
+let lastMove=null;
+let moveRows=[];            // [{n, w, b}]
+let captured={ w:[], b:[] }; // captured.w = 백이 잡은 (흑) 기물들
+let pendingPromo=null;
+let history=[];             // 무르기용 스냅샷
+
+const $ = id => document.getElementById(id);
+const boardEl = $('board');
+
+/* ----- 렌더 ----- */
+function render(){
+  const checkInfo = (gameActive && !gameOver) ? (inCheck(state, state.turn) ? findKing(state.board,state.turn) : null) : null;
+  const hlSet = new Set(legalForSelected.map(m=>m.tr*8+m.tc));
+  const capSet = new Set(legalForSelected.filter(m=>m.captured||m.flags.ep).map(m=>m.tr*8+m.tc));
+
+  let html='';
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const dark = (r+c)%2===1;
+    const cls=['square', dark?'dark':'light'];
+    if(selected && selected[0]===r && selected[1]===c) cls.push('sel');
+    if(lastMove && ((lastMove.fr===r&&lastMove.fc===c)||(lastMove.tr===r&&lastMove.tc===c))) cls.push('last');
+    if(hlSet.has(r*8+c)){ cls.push('hl'); if(capSet.has(r*8+c)) cls.push('cap'); }
+    if(checkInfo && checkInfo[0]===r && checkInfo[1]===c) cls.push('check');
+    const p=state.board[r][c];
+    const glyph = p ? `<span class="piece piece-${p[0]}">${GLYPH[p[0]][p[1]]}</span>` : '';
+    const fileLbl = (r===7) ? `<span class="coord file">${fileCh(c)}</span>` : '';
+    const rankLbl = (c===0) ? `<span class="coord rank">${rankCh(r)}</span>` : '';
+    html += `<div class="${cls.join(' ')}" data-r="${r}" data-c="${c}">${rankLbl}${fileLbl}<span class="hint"></span>${glyph}</div>`;
+  }
+  boardEl.innerHTML=html;
+}
+
+/* ----- 중앙 메시지 ----- */
+function showMessage(text, kind){
+  const el=$('centerMessage');
+  el.querySelector('.bubble').textContent=text;
+  el.className = 'msg-'+kind;   // msg-w / msg-b / msg-draw
+  el.classList.remove('hidden');
+}
+function hideMessage(){ $('centerMessage').className='hidden'; }
+
+/* ----- 상태 패널 ----- */
+function updateStatus(){
+  const st=$('status'), sub=$('subStatus'), think=$('thinking');
+  if(!gameActive){ st.textContent='시작하려면 PLAY를 누르세요.'; sub.textContent=''; think.textContent=''; return; }
+  const color=state.turn;
+  const dotColor = color==='w' ? '#fff' : '#111';
+  let who;
+  if(gameOver){ who='게임 종료'; }
+  else if(twoPlayer){ who = (color==='w'?'백':'흑') + ' 차례'; }
+  else { who = color==='w' ? '백(플레이어) 차례' : '흑(AI) 차례'; }
+  st.innerHTML = `<span class="turnDot" style="background:${dotColor}"></span>${who}`;
+  const modeTxt = twoPlayer ? '2인용 (사람 vs 사람)' : 'AI 난이도: '+({easy:'Easy',middle:'Middle',hard:'Hard',expert:'Expert'}[difficulty]);
+  sub.textContent = modeTxt;
+  think.textContent = aiThinking ? 'AI 생각 중…' : '';
+}
+
+/* ----- 잡은 기물 / 점수 우세 ----- */
+function renderCaptured(){
+  const order={q:5,r:4,b:3,n:2,p:1};
+  const draw=(arr,cls)=> arr.slice().sort((a,b)=>order[b[1]]-order[a[1]])
+      .map(p=>`<span class="${cls}">${GLYPH[p[0]][p[1]]}</span>`).join('');
+  $('capByWhite').innerHTML = draw(captured.w,'cap-b'); // 백이 잡은 = 흑 기물
+  $('capByBlack').innerHTML = draw(captured.b,'cap-w');
+  const val=arr=>arr.reduce((s,p)=>s+VAL[p[1]]/100,0);
+  const wv=val(captured.w), bv=val(captured.b), d=wv-bv;
+  $('advWhite').textContent = d>0 ? '+'+d : '';
+  $('advBlack').textContent = d<0 ? '+'+(-d) : '';
+}
+
+/* ----- 기보 ----- */
+function renderMoveList(){
+  const t=$('moveList');
+  t.innerHTML = moveRows.map(row =>
+    `<tr><td class="no">${row.n}.</td><td class="w">${row.w||''}</td><td class="b">${row.b||''}</td></tr>`
+  ).join('');
+  const sc=$('moveScroll'); sc.scrollTop=sc.scrollHeight;
+}
+function recordMove(color, san){
+  if(color==='w') moveRows.push({ n:moveRows.length+1, w:san, b:'' });
+  else { if(moveRows.length===0) moveRows.push({ n:1, w:'…', b:san }); else moveRows[moveRows.length-1].b=san; }
+  renderMoveList();
+}
+
+/* ----- SAN 표기 ----- */
+function disambig(pre, m){
+  const t=m.piece[1];
+  if(t==='p'||t==='k') return '';
+  const color=m.piece[0];
+  const others=genLegal(pre,color).filter(x=>x.piece[1]===t && x.tr===m.tr && x.tc===m.tc && !(x.fr===m.fr&&x.fc===m.fc));
+  if(others.length===0) return '';
+  const sameFile=others.some(x=>x.fc===m.fc);
+  const sameRank=others.some(x=>x.fr===m.fr);
+  if(!sameFile) return fileCh(m.fc);
+  if(!sameRank) return rankCh(m.fr);
+  return fileCh(m.fc)+rankCh(m.fr);
+}
+function buildSAN(m, dis, st){
+  let san;
+  if(m.flags.castle==='k') san='O-O';
+  else if(m.flags.castle==='q') san='O-O-O';
+  else {
+    const t=m.piece[1];
+    const cap = (m.captured||m.flags.ep) ? 'x' : '';
+    if(t==='p'){ san=(cap?fileCh(m.fc):'')+cap+sq(m.tr,m.tc); if(m.promotion) san+='='+m.promotion.toUpperCase(); }
+    else { san=t.toUpperCase()+dis+cap+sq(m.tr,m.tc); }
+  }
+  if(st.mate) san+='#'; else if(st.check) san+='+';
+  return san;
+}
+
+/* ----- 선택 / 클릭 ----- */
+function clearSelection(){ selected=null; legalForSelected=[]; }
+function selectPiece(r,c){
+  selected=[r,c];
+  legalForSelected=genLegal(state,state.turn).filter(m=>m.fr===r&&m.fc===c);
+  render();
+}
+function onBoardClick(r,c){
+  if(!gameActive || gameOver || aiThinking) return;
+  const color=state.turn;
+  if(!twoPlayer && color!=='w') return; // 1인용에서는 백(사람)만 조작
+  const p=state.board[r][c];
+  if(selected){
+    const mv=legalForSelected.find(m=>m.tr===r&&m.tc===c);
+    if(mv){ doPlayerMove(mv); return; }
+    if(p && p[0]===color){ selectPiece(r,c); return; }
+    clearSelection(); render();
+  } else if(p && p[0]===color){
+    selectPiece(r,c);
+  }
+}
+boardEl.addEventListener('click', e=>{
+  const cell=e.target.closest('.square'); if(!cell) return;
+  onBoardClick(+cell.dataset.r, +cell.dataset.c);
+});
+
+/* ----- 플레이어 수: 프로모션 처리 ----- */
+function doPlayerMove(mv){
+  if(mv.isPromo){
+    pendingPromo=mv;
+    const box=$('promoBtns'); const color=mv.piece[0];
+    box.innerHTML=['q','r','b','n'].map(t=>`<button data-p="${t}">${GLYPH[color][t]}</button>`).join('');
+    $('promoModal').classList.remove('hidden');
+    return;
+  }
+  applyMove(mv);
+}
+$('promoBtns').addEventListener('click', e=>{
+  const btn=e.target.closest('button'); if(!btn||!pendingPromo) return;
+  const m={ ...pendingPromo, promotion:btn.dataset.p };
+  pendingPromo=null;
+  $('promoModal').classList.add('hidden');
+  applyMove(m);
+});
+
+/* ----- 수 적용 + 판정 ----- */
+function applyMove(m){
+  const pre=state;
+  const moverColor=m.piece[0];
+  history.push({ state:pre, lastMove, moveRows:moveRows.map(r=>({...r})), captured:{w:captured.w.slice(),b:captured.b.slice()} });
+
+  const dis=disambig(pre,m);
+  const ns=makeMove(pre,m);
+
+  const oppColor=ns.turn;
+  const oppInCheck=inCheck(ns,oppColor);
+  const oppHasMoves=genLegal(ns,oppColor).length>0;
+  const mate = oppInCheck && !oppHasMoves;
+  const stale= !oppInCheck && !oppHasMoves;
+  const check= oppInCheck && oppHasMoves;
+
+  const san=buildSAN(m,dis,{check,mate});
+  if(m.captured) captured[moverColor].push(m.captured);
+
+  state=ns;
+  lastMove=m;
+  clearSelection();
+  recordMove(moverColor, san);
+  renderCaptured();
+  render();
+
+  if(mate){
+    gameOver=true;
+    showMessage('!checkmate!', oppColor);
+    updateStatus();
+    $('status').innerHTML = `🏁 체크메이트 — <b>${oppColor==='w'?'흑(AI)':'백'} 승리!</b>`;
+  } else if(stale){
+    gameOver=true;
+    showMessage('!stalemate!', 'draw');
+    updateStatus();
+    $('status').innerHTML = '🤝 스테일메이트 — <b>무승부</b>';
+  } else if(check){
+    showMessage('!check!', oppColor);
+    updateStatus();
+  } else {
+    hideMessage();
+    updateStatus();
+  }
+
+  if(!gameOver && !twoPlayer && state.turn==='b') scheduleAI();
+}
+
+/* ----- AI 턴 (비동기 딜레이) ----- */
+function scheduleAI(){
+  aiThinking=true; updateStatus();
+  setTimeout(()=>{
+    if(!gameActive || gameOver){ aiThinking=false; return; }
+    let mv=null;
+    try { mv=chooseAIMove(state, difficulty); } catch(e){ mv=null; }
+    aiThinking=false;
+    if(mv) applyMove(mv);
+    else { updateStatus(); } // 합법 수 없음 → 직전 판정에서 이미 종료 처리됨
+  }, THINK_DELAY);
+}
+
+/* ----- 무르기 ----- */
+function undo(){
+  if(aiThinking || history.length===0) return;
+  // 1인용: 사람+AI 두 수, 2인용: 한 수
+  const steps = (!twoPlayer && history.length>=2) ? 2 : 1;
+  let snap;
+  for(let i=0;i<steps && history.length>0;i++) snap=history.pop();
+  state=snap.state; lastMove=snap.lastMove; moveRows=snap.moveRows; captured=snap.captured;
+  gameOver=false; clearSelection(); hideMessage();
+  renderMoveList(); renderCaptured(); render(); updateStatus();
+  // 무른 뒤 다시 체크 상태면 메시지 복원
+  if(gameActive){
+    const c=state.turn;
+    if(inCheck(state,c) && genLegal(state,c).length>0) showMessage('!check!', c);
+  }
+}
+
+/* ----- 게임 시작 / 리셋 ----- */
+function resetGameState(){
+  state=initState();
+  selected=null; legalForSelected=[]; lastMove=null;
+  moveRows=[]; captured={w:[],b:[]}; history=[];
+  gameOver=false; aiThinking=false; pendingPromo=null;
+  hideMessage(); renderMoveList(); renderCaptured();
+}
+function startGame(diff, two){
+  difficulty = diff || difficulty;
+  twoPlayer = !!two;
+  resetGameState();
+  gameActive=true;
+  $('overlay').classList.add('hidden');
+  $('promoModal').classList.add('hidden');
+  render(); updateStatus();
+}
+function showStart(){
+  gameActive=false; gameOver=false; aiThinking=false;
+  $('screenDifficulty').classList.add('hidden');
+  $('screenStart').classList.remove('hidden');
+  $('overlay').classList.remove('hidden');
+  $('promoModal').classList.add('hidden');
+  hideMessage();
+  resetGameState();
+  render(); updateStatus();
+}
+function restart(){ showStart(); }
+
+/* ----- 오버레이 버튼 ----- */
+$('playBtn').addEventListener('click', ()=>{
+  $('screenStart').classList.add('hidden');
+  $('screenDifficulty').classList.remove('hidden');
+});
+$('backBtn').addEventListener('click', ()=>{
+  $('screenDifficulty').classList.add('hidden');
+  $('screenStart').classList.remove('hidden');
+});
+document.querySelectorAll('.diffBtn').forEach(b=>{
+  b.addEventListener('click', ()=> startGame(b.dataset.d, false));
+});
+$('twoPlayerBtn').addEventListener('click', ()=> startGame(difficulty, true));
+$('restartBtn').addEventListener('click', restart);
+$('undoBtn').addEventListener('click', undo);
+
+/* ----- 초기 진입 ----- */
+resetGameState();
+render();
+updateStatus();
+</script>
+</body>
+</html>
