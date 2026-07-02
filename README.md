@@ -1,10 +1,15 @@
 # ♟ 체스 — Chess vs AI
 
-브라우저에서 바로 즐기는 **1인용 / 2인용 체스 게임**입니다. 설치 없이 HTML/CSS/JavaScript 단일 파일([`index.html`](index.html))로 동작합니다.
+브라우저에서 바로 즐기는 **1인용 / 2인용 체스 게임**입니다. 설치 없이 HTML/CSS/JavaScript 파일로 동작합니다.
+
+- **2D 버전** — 가볍고 빠름 · 단일 파일 [`index.html`](index.html)
+- **🧊 3D 버전** — Three.js로 기물·판을 입체 렌더링, 이동/캡처 애니메이션 · [`chess3d.html`](chess3d.html)
+  (판을 손가락/마우스로 돌리고 확대할 수 있어요. 3D는 실행 시 인터넷으로 Three.js를 불러옵니다.)
 
 ## ▶ 지금 플레이
 
-### **https://hwoarang0911-hue.github.io/chess/**
+- 2D: **https://hwoarang0911-hue.github.io/chess/**
+- 3D: **https://hwoarang0911-hue.github.io/chess/chess3d.html**
 
 > ⚠️ 위 링크는 저장소 **Settings → Pages** 에서 Pages를 한 번 켜야 동작합니다. (아래 [온라인 배포](#-온라인-배포-github-pages) 참고)
 > 지금 바로 해보려면 [`index.html`](index.html) 파일을 내려받아 더블클릭하세요.
