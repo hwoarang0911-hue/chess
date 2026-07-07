@@ -602,6 +602,7 @@ function makePiece(type, color){
     add(BOX(0.06,0.22,0.06), 0.93);   // 십자 세로
     add(BOX(0.16,0.06,0.06), 0.90);   // 십자 가로
   }
+  if(type==='p') g.scale.setScalar(0.82);   // 폰은 조금 작게 — 다른 기물과 구분
   g.userData.material = mat;
   return g;
 }
