@@ -100,8 +100,19 @@
   .promoBox{ background:#20223a; border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:18px 20px; text-align:center; box-shadow:0 14px 36px rgba(0,0,0,.6); }
   .promoBox .t{ font-weight:700; margin-bottom:12px; }
   .promoBtns{ display:flex; gap:10px; }
-  .promoBtns button{ width:72px; height:72px; font-size:2.4rem; line-height:1; background:#f0d9b5; color:#1a1a1a; border-radius:12px; }
+  .promoBtns button{ width:80px; height:96px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; background:#f0d9b5; color:#1a1a1a; border-radius:12px; }
+  .promoBtns .pg{ font-size:2.5rem; line-height:1; }
+  .promoBtns .pk{ font-size:.82rem; font-weight:800; }
   .promoBtns button:active{ filter:brightness(1.08); }
+
+  /* 게임 종료 배너 */
+  #endBanner{ position:fixed; left:0; right:0; bottom:11%; z-index:45; display:flex; justify-content:center; pointer-events:none; padding:0 16px; }
+  #endBanner.hidden{ display:none; }
+  .endCard{ pointer-events:auto; background:rgba(20,22,36,.92); border:1px solid rgba(255,255,255,.12); border-radius:18px; padding:18px 26px; text-align:center; box-shadow:0 16px 44px rgba(0,0,0,.6); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); max-width:92vw; }
+  #endTitle{ font-size:1.5rem; font-weight:900; letter-spacing:.02em; }
+  #endSub{ font-size:1.05rem; opacity:.92; margin-top:6px; }
+  .endBtns{ margin-top:14px; display:flex; gap:12px; align-items:center; justify-content:center; }
+  .endBtns .bigBtn{ font-size:1.1rem; padding:11px 30px; letter-spacing:.06em; }
 
   @media (max-width:520px){
     #movePanel{ width:150px; }
@@ -125,7 +136,7 @@
     <button class="pill" id="undoBtn">↶ 무르기</button>
     <button class="pill" id="movesBtn">☰ 기보</button>
     <button class="pill" id="camBtn">🎥 시점</button>
-    <a class="pill" href="index.html" title="2D 버전으로">🁢 2D</a>
+    <a class="pill" href="index.html" title="2D 버전으로">▦ 2D</a>
   </div>
 
   <div id="movePanel" class="hud">
@@ -140,6 +151,17 @@
   </div>
 
   <div id="centerMessage" class="hidden"><div class="bubble"></div></div>
+
+  <div id="endBanner" class="hidden">
+    <div class="endCard">
+      <div id="endTitle"></div>
+      <div id="endSub"></div>
+      <div class="endBtns">
+        <button class="bigBtn" id="endRestart">다시 시작</button>
+        <button class="linkBtn" id="endClose">판 보기</button>
+      </div>
+    </div>
+  </div>
 
   <div id="overlay">
     <div class="screen" id="screenStart">
@@ -417,14 +439,14 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.2;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x12131f);
 scene.fog = new THREE.Fog(0x12131f, 16, 30);
 
 const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.1, 100);
-const CAM_HOME = new THREE.Vector3(0, 8.2, 8.6);
+const CAM_HOME = new THREE.Vector3(0, 10.6, 11.8);
 camera.position.copy(CAM_HOME);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -432,13 +454,13 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.target.set(0, 0, 0);
 controls.minDistance = 6;
-controls.maxDistance = 20;
+controls.maxDistance = 24;
 controls.maxPolarAngle = 1.42;      // 판 아래로 못 내려가게
 controls.enablePan = false;
 
 /* --- 조명 --- */
-scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2a3a, 0.55));
-const sun = new THREE.DirectionalLight(0xffffff, 1.15);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x53536e, 0.92));
+const sun = new THREE.DirectionalLight(0xffffff, 1.25);
 sun.position.set(6, 12, 7);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -447,9 +469,12 @@ sun.shadow.camera.left = -7; sun.shadow.camera.right = 7;
 sun.shadow.camera.top = 7; sun.shadow.camera.bottom = -7;
 sun.shadow.bias = -0.0004;
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0x99aaff, 0.28);
+const fill = new THREE.DirectionalLight(0xaec0ff, 0.42);
 fill.position.set(-6, 5, -4);
 scene.add(fill);
+const frontFill = new THREE.DirectionalLight(0xffffff, 0.4);   // 카메라 쪽 보조광 — 검은 말도 또렷하게
+frontFill.position.set(0, 6, 12);
+scene.add(frontFill);
 
 /* --- 바닥(그림자 받이) --- */
 const ground = new THREE.Mesh(
@@ -464,17 +489,42 @@ scene.add(ground);
 /* --- 좌표 변환 --- */
 function squareToWorld(r,c){ return new THREE.Vector3((c-3.5)*TILE, 0, (r-3.5)*TILE); }
 
+/* --- 나무 목재 텍스처 (캔버스 절차적 생성) --- */
+function makeWoodTexture(){
+  const cv=document.createElement('canvas'); cv.width=1024; cv.height=256;
+  const x=cv.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,256);
+  g.addColorStop(0,'#7a4e26'); g.addColorStop(0.5,'#9c6a34'); g.addColorStop(1,'#5d3a1b');
+  x.fillStyle=g; x.fillRect(0,0,1024,256);
+  for(let i=0;i<130;i++){                          // 가로로 흐르는 나뭇결
+    const y=Math.random()*256, sh=Math.random()*44-22;
+    x.strokeStyle=`rgba(${72+sh},${48+sh},${24+sh},${0.16+Math.random()*0.34})`;
+    x.lineWidth=0.4+Math.random()*1.7; x.beginPath();
+    for(let px=0;px<=1024;px+=6){ const yy=y+Math.sin(px*0.012+i*0.7)*4+Math.sin(px*0.004+i)*8; px===0?x.moveTo(px,yy):x.lineTo(px,yy); }
+    x.stroke();
+  }
+  for(let i=0;i<10;i++){                            // 진한 결
+    const y=Math.random()*256; x.strokeStyle='rgba(44,27,11,0.5)'; x.lineWidth=2+Math.random()*3; x.beginPath();
+    for(let px=0;px<=1024;px+=6){ const yy=y+Math.sin(px*0.01+i)*5; px===0?x.moveTo(px,yy):x.lineTo(px,yy); }
+    x.stroke();
+  }
+  const t=new THREE.CanvasTexture(cv);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=8;
+  return t;
+}
+const woodTex = makeWoodTexture();
+
 /* --- 보드 --- */
 const boardGroup = new THREE.Group();
 scene.add(boardGroup);
 const tiles = [];
 (function buildBoard(){
-  // 프레임
+  // 프레임 — 고급 원목 측면
   const frame = new THREE.Mesh(
-    new THREE.BoxGeometry(8.9, 0.5, 8.9),
-    new THREE.MeshStandardMaterial({ color:0x3a2717, roughness:0.6, metalness:0.15 })
+    new THREE.BoxGeometry(9.2, 0.55, 9.2),
+    new THREE.MeshStandardMaterial({ map:woodTex, color:0xffffff, roughness:0.42, metalness:0.1 })
   );
-  frame.position.y = -0.27; frame.receiveShadow = true; frame.castShadow = true;
+  frame.position.y = -0.28; frame.receiveShadow = true; frame.castShadow = true;
   boardGroup.add(frame);
   const tileGeo = new THREE.BoxGeometry(0.98, 0.22, 0.98);
   for(let r=0;r<8;r++)for(let c=0;c<8;c++){
@@ -491,7 +541,7 @@ const tiles = [];
 function pieceMaterial(color){
   return color==='w'
     ? new THREE.MeshStandardMaterial({ color:0xf3ead6, roughness:0.45, metalness:0.08 })
-    : new THREE.MeshStandardMaterial({ color:0x26262e, roughness:0.5, metalness:0.28 });
+    : new THREE.MeshStandardMaterial({ color:0x4c4c5a, roughness:0.48, metalness:0.1 });
 }
 
 /* --- 기물 형상 (프리미티브 조합) --- */
@@ -711,8 +761,15 @@ let lastMove=null, moveRows=[], captured={w:[],b:[]}, history=[], pendingPromo=n
 const GLY = { w:{p:'♙',n:'♘',b:'♗',r:'♖',q:'♕',k:'♔'}, b:{p:'♟',n:'♞',b:'♝',r:'♜',q:'♛',k:'♚'} };
 const $ = id => document.getElementById(id);
 
-function showMessage(text,kind){ const el=$('centerMessage'); el.querySelector('.bubble').textContent=text; el.className='msg-'+kind; el.classList.remove('hidden'); }
-function hideMessage(){ $('centerMessage').className='hidden'; }
+let msgTimer=null;
+function showMessage(text,kind,autoHideMs){
+  if(msgTimer){ clearTimeout(msgTimer); msgTimer=null; }
+  const el=$('centerMessage'); el.querySelector('.bubble').textContent=text; el.className='msg-'+kind; el.classList.remove('hidden');
+  if(autoHideMs){ msgTimer=setTimeout(()=>{ el.classList.add('hidden'); msgTimer=null; }, autoHideMs); }
+}
+function hideMessage(){ if(msgTimer){ clearTimeout(msgTimer); msgTimer=null; } $('centerMessage').className='hidden'; }
+function showEnd(title,sub){ $('endTitle').textContent=title; $('endSub').textContent=sub; $('endBanner').classList.remove('hidden'); }
+function hideEnd(){ $('endBanner').classList.add('hidden'); }
 
 function updateStatus(){
   const t=$('turnText'), dot=$('turnDot'), sub=$('subLine'), think=$('thinkLine');
@@ -788,7 +845,7 @@ function doPlayerMove(mv){
   if(mv.isPromo){
     pendingPromo=mv;
     const color=mv.piece[0];
-    $('promoBtns').innerHTML=['q','r','b','n'].map(t=>`<button data-p="${t}">${GLY[color][t]}</button>`).join('');
+    $('promoBtns').innerHTML=['q','r','b','n'].map(t=>`<button data-p="${t}"><span class="pg">${GLY[color][t]}</span><span class="pk">${NICE[t]}</span></button>`).join('');
     $('promoModal').classList.remove('hidden');
     return;
   }
@@ -862,9 +919,18 @@ function applyMove(m){
     if(m.promotion && moverMesh) swapPromotion(moverMesh, m.tr, m.tc, moverColor, m.promotion);
     animating=false;
     rebuildMarkers();
-    if(mate){ gameOver=true; showMessage('!checkmate!',oppColor); $('turnText').textContent='체크메이트 — '+(oppColor==='w'?'흑(AI)':'백')+' 승리!'; }
-    else if(stale){ gameOver=true; showMessage('!stalemate!','draw'); $('turnText').textContent='스테일메이트 — 무승부'; }
-    else if(check){ showMessage('!check!',oppColor); updateStatus(); }
+    if(mate){
+      gameOver=true;
+      showMessage('CHECKMATE', oppColor);
+      const winName = twoPlayer ? (moverColor==='w'?'백':'흑') : (moverColor==='w'?'백 (플레이어)':'흑 (AI)');
+      $('turnText').textContent='체크메이트 — '+winName+' 승리!';
+      setTimeout(()=>{ if(gameOver) showEnd('🏁 체크메이트!', winName+' 승리 🎉'); }, 1300);
+    } else if(stale){
+      gameOver=true;
+      showMessage('STALEMATE','draw');
+      $('turnText').textContent='스테일메이트 — 무승부';
+      setTimeout(()=>{ if(gameOver) showEnd('🤝 스테일메이트', '무승부'); }, 1300);
+    } else if(check){ showMessage('CHECK', oppColor, 1600); updateStatus(); }
     else { hideMessage(); updateStatus(); }
     if(!gameOver && !twoPlayer && state.turn==='b') scheduleAI();
   };
@@ -902,7 +968,7 @@ function undo(){
   state=snap.state; lastMove=snap.lastMove; moveRows=snap.moveRows; captured=snap.captured;
   gameOver=false; clearSelection(); hideMessage();
   buildPieces(state); renderMoveList(); renderCaptured(); rebuildMarkers(); updateStatus();
-  if(gameActive){ const c=state.turn; if(inCheck(state,c)&&genLegal(state,c).length>0) showMessage('!check!',c); }
+  if(gameActive){ const c=state.turn; if(inCheck(state,c)&&genLegal(state,c).length>0) showMessage('CHECK',c,1600); }
 }
 
 /* --- 시작 / 리셋 --- */
@@ -910,7 +976,7 @@ function resetGame(){
   state=initState();
   selected=null; legalForSelected=[]; lastMove=null;
   moveRows=[]; captured={w:[],b:[]}; history=[]; gameOver=false; aiThinking=false; animating=false; pendingPromo=null;
-  buildPieces(state); rebuildMarkers(); renderMoveList(); renderCaptured(); hideMessage();
+  buildPieces(state); rebuildMarkers(); renderMoveList(); renderCaptured(); hideMessage(); hideEnd();
 }
 function startGame(diff,two){
   difficulty=diff||difficulty; twoPlayer=!!two;
@@ -934,6 +1000,8 @@ $('restartBtn').addEventListener('click', showStart);
 $('undoBtn').addEventListener('click', undo);
 $('movesBtn').addEventListener('click', ()=>$('movePanel').classList.toggle('open'));
 $('camBtn').addEventListener('click', ()=>{ camera.position.copy(CAM_HOME); controls.target.set(0,0,0); controls.update(); });
+$('endRestart').addEventListener('click', showStart);
+$('endClose').addEventListener('click', ()=>{ hideEnd(); hideMessage(); });
 
 /* --- 리사이즈 --- */
 window.addEventListener('resize', ()=>{
