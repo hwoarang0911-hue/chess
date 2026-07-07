@@ -494,17 +494,17 @@ function makeWoodTexture(){
   const cv=document.createElement('canvas'); cv.width=1024; cv.height=256;
   const x=cv.getContext('2d');
   const g=x.createLinearGradient(0,0,0,256);
-  g.addColorStop(0,'#7a4e26'); g.addColorStop(0.5,'#9c6a34'); g.addColorStop(1,'#5d3a1b');
+  g.addColorStop(0,'#3a2414'); g.addColorStop(0.5,'#4a3020'); g.addColorStop(1,'#1c1008');
   x.fillStyle=g; x.fillRect(0,0,1024,256);
   for(let i=0;i<130;i++){                          // 가로로 흐르는 나뭇결
     const y=Math.random()*256, sh=Math.random()*44-22;
-    x.strokeStyle=`rgba(${72+sh},${48+sh},${24+sh},${0.16+Math.random()*0.34})`;
+    x.strokeStyle=`rgba(${48+sh},${32+sh},${18+sh},${0.18+Math.random()*0.34})`;
     x.lineWidth=0.4+Math.random()*1.7; x.beginPath();
     for(let px=0;px<=1024;px+=6){ const yy=y+Math.sin(px*0.012+i*0.7)*4+Math.sin(px*0.004+i)*8; px===0?x.moveTo(px,yy):x.lineTo(px,yy); }
     x.stroke();
   }
   for(let i=0;i<10;i++){                            // 진한 결
-    const y=Math.random()*256; x.strokeStyle='rgba(44,27,11,0.5)'; x.lineWidth=2+Math.random()*3; x.beginPath();
+    const y=Math.random()*256; x.strokeStyle='rgba(14,8,3,0.55)'; x.lineWidth=2+Math.random()*3; x.beginPath();
     for(let px=0;px<=1024;px+=6){ const yy=y+Math.sin(px*0.01+i)*5; px===0?x.moveTo(px,yy):x.lineTo(px,yy); }
     x.stroke();
   }
@@ -519,12 +519,12 @@ const boardGroup = new THREE.Group();
 scene.add(boardGroup);
 const tiles = [];
 (function buildBoard(){
-  // 프레임 — 고급 원목 측면
+  // 프레임 — 어두운 원목, 얇은 테두리
   const frame = new THREE.Mesh(
-    new THREE.BoxGeometry(9.2, 0.55, 9.2),
-    new THREE.MeshStandardMaterial({ map:woodTex, color:0xffffff, roughness:0.42, metalness:0.1 })
+    new THREE.BoxGeometry(8.4, 0.34, 8.4),
+    new THREE.MeshStandardMaterial({ map:woodTex, color:0xffffff, roughness:0.5, metalness:0.1 })
   );
-  frame.position.y = -0.28; frame.receiveShadow = true; frame.castShadow = true;
+  frame.position.y = -0.19; frame.receiveShadow = true; frame.castShadow = true;
   boardGroup.add(frame);
   const tileGeo = new THREE.BoxGeometry(0.98, 0.22, 0.98);
   for(let r=0;r<8;r++)for(let c=0;c<8;c++){
